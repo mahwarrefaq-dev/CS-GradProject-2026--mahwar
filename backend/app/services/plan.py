@@ -68,7 +68,7 @@ def _project_snapshot(p: Project) -> dict:
                   "planned_start_date": p.planned_start_date, "planned_end_date": p.planned_end_date,
                   "team_size": p.team_size, "status": p.status, "data_mode": p.data_mode,
                   "consent_ref": p.consent_ref, "consent_date": p.consent_date,
-                  "member_ids": sorted(m.user_id for m in p.members)})
+                  "members": sorted(m.username for m in p.members)})
 
 
 def _check_project_rules(start: date, end: date, data_mode: str, consent_ref: str | None,
@@ -85,14 +85,15 @@ def _check_project_rules(start: date, end: date, data_mode: str, consent_ref: st
         raise _invalid(fields)
 
 
-def _resolve_members(db: Session, member_ids: list[int], manager: User) -> list[User]:
-    ids = set(member_ids) | {manager.user_id}
-    users = list(db.scalars(select(User).where(User.user_id.in_(ids))))
-    missing = ids - {u.user_id for u in users}
-    inactive = [u.user_id for u in users if not u.is_active]
+def _resolve_members(db: Session, member_usernames: list[str], manager: User) -> list[User]:
+    names = {n.strip().lower() for n in member_usernames if n and n.strip()} | {manager.username}
+    users = list(db.scalars(select(User).where(User.username.in_(names))))
+    missing = names - {u.username for u in users}
+    inactive = {u.username for u in users if not u.is_active}
     if missing or inactive:
-        bad = sorted(missing | set(inactive))
-        raise _invalid([{"field": "member_ids", "message": f"مستخدمون غير موجودين أو غير نشطين: {bad}"}])
+        bad = "، ".join(sorted(missing | inactive))
+        raise _invalid([{"field": "member_usernames",
+                         "message": f"أسماء مستخدمين غير موجودة أو غير نشطة: {bad}"}])
     return sorted(users, key=lambda u: u.user_id)
 
 
@@ -127,12 +128,9 @@ def create_project(db: Session, data: ProjectCreate, actor: User) -> Project:
     if db.scalar(select(Project.project_id).where(Project.project_code == data.project_code)) is not None:
         raise ApiError(409, "DUPLICATE_PROJECT_CODE", "رمز المشروع مستخدم من قبل",
                        [{"field": "project_code", "message": "رمز المشروع مستخدم من قبل"}])
-    values = data.model_dump(exclude={"member_ids"})
-    if values["data_mode"] == "synthetic":
-        values["consent_ref"] = values["consent_ref"] or None
-    project = Project(**values, manager_user_id=actor.user_id)
+    project = Project(**data.model_dump(exclude={"member_usernames"}), manager_user_id=actor.user_id)
     project.manager = actor
-    project.members = _resolve_members(db, data.member_ids, actor)
+    project.members = _resolve_members(db, data.member_usernames, actor)
     db.add(project)
     db.flush()
     audit.record(db, "create", actor.user_id, "projects", project.project_id, new_value=_project_snapshot(project))
@@ -148,8 +146,8 @@ def update_project(db: Session, project: Project, data: ProjectUpdate, actor: Us
               ("planned_start_date", "planned_end_date", "data_mode", "consent_ref", "consent_date")}
     _check_project_rules(merged["planned_start_date"], merged["planned_end_date"], merged["data_mode"],
                          merged["consent_ref"], merged["consent_date"])
-    if "member_ids" in changes:
-        project.members = _resolve_members(db, changes.pop("member_ids") or [], project.manager)
+    if "member_usernames" in changes:
+        project.members = _resolve_members(db, changes.pop("member_usernames") or [], project.manager)
     for key, value in changes.items():
         setattr(project, key, value)
     project.updated_at = func.now()

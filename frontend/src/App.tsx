@@ -1,44 +1,50 @@
 import { useEffect, useState } from "react";
-import { apiGet } from "./api";
+import { clearSession, getSession, setUnauthorizedHandler, type CurrentUser } from "./api";
+import Layout from "./components/Layout";
+import LoginPage from "./pages/LoginPage";
+import PlanPage from "./pages/PlanPage";
+import ProjectsPage from "./pages/ProjectsPage";
 
-type Status = "checking" | "ok" | "error";
+// Simple screen state instead of a routing library (project technology list).
+type Screen = { name: "projects" } | { name: "plan"; projectId: number };
 
-const LABELS: Record<Status, string> = {
-  checking: "جارٍ الفحص…",
-  ok: "متصل",
-  error: "غير متصل",
+const TITLES: Record<Screen["name"], string> = {
+  projects: "قائمة المشروعات",
+  plan: "خطة المشروع",
 };
 
 export default function App() {
-  const [api, setApi] = useState<Status>("checking");
-  const [db, setDb] = useState<Status>("checking");
+  const [user, setUser] = useState<CurrentUser | null>(() => getSession());
+  const [screen, setScreen] = useState<Screen>({ name: "projects" });
+
+  function logout() {
+    clearSession();
+    setUser(null);
+    setScreen({ name: "projects" });
+  }
 
   useEffect(() => {
-    apiGet("/health").then(() => setApi("ok")).catch(() => setApi("error"));
-    apiGet("/health/db").then(() => setDb("ok")).catch(() => setDb("error"));
+    setUnauthorizedHandler(logout); // expired or invalid token -> back to SCR-01
+    return () => setUnauthorizedHandler(null);
   }, []);
 
+  if (user === null) {
+    return <LoginPage onLogin={setUser} />;
+  }
+
   return (
-    <main className="page">
-      <header className="top">
-        <img src="/logo.png" alt="" className="logo" />
-        <h1>محور</h1>
-      </header>
-      <section className="card">
-        <h2>فحص بيئة التطوير</h2>
-        <table className="tb">
-          <tbody>
-            <tr>
-              <th>الخدمة الخلفية (FastAPI)</th>
-              <td className={api}>{LABELS[api]}</td>
-            </tr>
-            <tr>
-              <th>قاعدة البيانات (PostgreSQL)</th>
-              <td className={db}>{LABELS[db]}</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
-    </main>
+    <Layout
+      user={user}
+      title={TITLES[screen.name]}
+      onLogout={logout}
+      onProjects={() => setScreen({ name: "projects" })}
+    >
+      {screen.name === "projects" && (
+        <ProjectsPage user={user} onOpen={(projectId) => setScreen({ name: "plan", projectId })} />
+      )}
+      {screen.name === "plan" && (
+        <PlanPage projectId={screen.projectId} onBack={() => setScreen({ name: "projects" })} />
+      )}
+    </Layout>
   );
 }

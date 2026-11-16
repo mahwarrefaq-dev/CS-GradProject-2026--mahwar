@@ -25,7 +25,7 @@ def pm_headers(team, auth_headers):
 def project(client, team, pm_headers) -> dict:
     response = client.post("/api/projects", headers=pm_headers, json={
         "project_code": "PRJ-001", "project_name": "تطوير بوابة خدمات", "planned_start_date": "2026-11-01",
-        "planned_end_date": "2027-01-30", "member_ids": [team["member"].user_id]})
+        "planned_end_date": "2027-01-30", "member_usernames": ["member.a"]})
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -122,20 +122,21 @@ def test_other_manager_cannot_patch_project(client, project, auth_headers):
     assert response.status_code == 403
 
 
-def test_pm_updates_members(client, project, team, pm_headers):
+def test_pm_updates_members_by_username(client, project, pm_headers):
     response = client.patch(f"/api/projects/{project['project_id']}", headers=pm_headers,
-                            json={"member_ids": [team["outsider"].user_id]})
+                            json={"member_usernames": [" Member.Z "]})
 
     assert response.status_code == 200
     assert {m["username"] for m in response.json()["members"]} == {"pm.demo", "member.z"}
 
 
-def test_unknown_member_id_returns_422(client, project, pm_headers):
+def test_unknown_member_username_returns_422(client, project, pm_headers):
     response = client.patch(f"/api/projects/{project['project_id']}", headers=pm_headers,
-                            json={"member_ids": [9999]})
+                            json={"member_usernames": ["member.a", "ghost.user"]})
 
     assert response.status_code == 422
-    assert response.json()["fields"][0]["field"] == "member_ids"
+    field = response.json()["fields"][0]
+    assert field["field"] == "member_usernames" and "ghost.user" in field["message"]
 
 
 def test_unknown_project_returns_404(client, pm_headers):

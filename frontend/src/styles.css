@@ -30,3 +30,97 @@ body { margin: 0; background: #fff; direction: rtl; }
 .ok { color: var(--low); font-weight: bold; }
 .error { color: var(--high); font-weight: bold; }
 .checking { color: var(--na); }
+
+/* --- Release 1: SCR-01..SCR-03 ------------------------------------------- */
+
+/* Frame: top bar + side navigation (wireframes SCR-02, SCR-03) */
+.topbar {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 16px;
+  padding: 8px 24px; background: var(--light); border-bottom: 2px solid var(--border);
+}
+.brand { display: flex; align-items: center; gap: 8px; font-weight: bold; font-size: 22px; color: var(--primary); }
+.brand .logo { height: 36px; }
+.screen-title { margin: 0; text-align: center; font-size: 18px; color: var(--primary); font-weight: 600; }
+.who { display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--na); }
+
+.shell { min-height: 100vh; display: flex; flex-direction: column; }
+.body { display: flex; flex: 1; }
+.sidenav {
+  width: 200px; flex-shrink: 0; padding: 16px 12px; background: #fafbfc;
+  border-left: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px;
+}
+.nav-item {
+  text-align: right; padding: 10px 12px; border: 1px dashed var(--border); border-radius: 6px;
+  background: #fff; font: inherit; color: inherit; cursor: pointer;
+}
+.nav-item.active { background: var(--primary); color: #fff; border-style: solid; border-color: var(--primary); }
+.nav-item:disabled { color: #98a2b3; cursor: not-allowed; }
+.content { flex: 1; padding: 24px; max-width: 1200px; }
+
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  border-bottom: 2px solid var(--light); margin-bottom: 16px; }
+.section-head h2 { color: var(--primary); margin: 8px 0; }
+
+/* Buttons */
+.btn {
+  font: inherit; font-size: 15px; padding: 8px 16px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--border); background: #fff; color: #1d2939;
+}
+.btn:hover:not(:disabled) { border-color: var(--primary); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn:focus-visible, .nav-item:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 3px solid #84adff; outline-offset: 1px;
+}
+.btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+.btn-danger { color: var(--high); }
+.btn-link { border: none; background: none; color: var(--primary); padding: 4px; text-decoration: underline; }
+.btn-small { font-size: 13px; padding: 4px 10px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+
+/* Forms: label above, error under the field (Design guide) */
+.form-card { background: #fff; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0 16px; }
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.field label { font-size: 14px; color: #344054; }
+.field input, .field select {
+  font: inherit; padding: 8px 10px; border: 1px solid #98a2b3; border-radius: 6px; background: #fff;
+}
+.field input:disabled { background: var(--light); }
+.field.has-error input, .field.has-error select { border-color: var(--high); background: #fef3f2; }
+.field-error { color: var(--high); font-size: 13px; font-weight: 600; }
+.hint { color: var(--na); font-size: 12px; }
+
+/* Messages */
+.alert { border: 2px solid var(--high); background: #fef3f2; color: var(--high); padding: 10px 12px;
+  border-radius: 6px; font-weight: 600; }
+.notice { border: 1px solid var(--low); background: #ecfdf3; color: var(--low); padding: 10px 12px; border-radius: 6px; }
+.muted { color: var(--na); }
+.empty { color: var(--na); padding: 24px; text-align: center; border: 1px dashed var(--border); border-radius: 8px; }
+
+/* Data tables: alternate light rows (Design guide), codes and dates left-to-right */
+.tb.data th { width: auto; white-space: nowrap; }
+.tb.data tbody tr:nth-child(even) { background: var(--light); }
+.code, .date { direction: ltr; unicode-bidi: isolate; text-align: right; font-variant-numeric: tabular-nums; }
+.row-actions { white-space: nowrap; display: flex; gap: 6px; }
+
+/* Project summary on SCR-03 */
+.summary { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 16px;
+  border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 8px; }
+.summary div { display: flex; flex-direction: column; gap: 2px; }
+.summary .wide { grid-column: 1 / -1; }
+.summary .label { font-size: 13px; color: var(--na); }
+
+/* SCR-01 */
+.login-page { min-height: 100vh; background: #fff; }
+.login-card { max-width: 440px; margin: 40px auto 0; }
+.login-card + .login-card { margin-top: 16px; }
+.env-status th { width: 60%; }
+
+@media (max-width: 720px) {
+  .body { flex-direction: column; }
+  .sidenav { width: auto; flex-direction: row; flex-wrap: wrap; border-left: none; border-bottom: 1px solid var(--border); }
+  .topbar { grid-template-columns: 1fr auto; }
+  .screen-title { display: none; }
+  .content { padding: 16px; }
+  .tb.data { display: block; overflow-x: auto; }
+}
