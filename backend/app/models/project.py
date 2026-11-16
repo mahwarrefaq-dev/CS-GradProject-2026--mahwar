@@ -82,16 +82,20 @@ class BaselineTask(Base):
 
 
 class TaskSnapshot(Base):
-    """Mapped for reading only in Release 1 (used to block deleting a task with snapshots).
-    Snapshots are append-only (ARC-03); API-06 is added in Release 2."""
+    """Dated progress snapshot. Append-only (ARC-03, SEC-08): the API never updates or deletes it."""
     __tablename__ = "task_snapshots"
 
     snapshot_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     task_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("tasks.task_id"))
     baseline_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("baselines.baseline_id"))
     snapshot_date: Mapped[date] = mapped_column(Date)
-    snapshot_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    snapshot_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     update_source: Mapped[str] = mapped_column(String(20))
     progress_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2))
     status_at_snapshot: Mapped[str] = mapped_column(String(20))
+    remaining_estimate_days: Mapped[Decimal | None] = mapped_column(Numeric(6, 1))
+    blocker_note: Mapped[str | None] = mapped_column(String(500))
     recorded_by: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.user_id"))
+
+    baseline: Mapped[Baseline] = relationship(lazy="joined")
+    recorder: Mapped[User] = relationship(lazy="joined")
