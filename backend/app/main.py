@@ -5,11 +5,15 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import health
+from app.errors import register_error_handlers
+from app.routers import auth, health, users
 
 app = FastAPI(title="Mahwar API", version="0.1.0")
+register_error_handlers(app)
 
 app.include_router(health.router, prefix="/api")
+app.include_router(auth.router, prefix="/api")    # API-01
+app.include_router(users.router, prefix="/api")   # API-02
 # Routers of API-01..API-16 are added here release by release (Chapter 4, Table 4.3).
 
 FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
