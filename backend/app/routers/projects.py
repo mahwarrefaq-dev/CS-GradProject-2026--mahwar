@@ -1,10 +1,12 @@
-"""API-03 /api/projects, API-04 /api/projects/{id}/tasks, API-05 /api/projects/{id}/baselines (FR-02)."""
+"""API-03 /api/projects, API-04 /api/projects/{id}/tasks, API-05 /api/projects/{id}/baselines (FR-02),
+API-07 /api/projects/{id}/dependencies (FR-04)."""
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import PROJECT_MANAGER, get_current_user, require_roles
 from app.models import User
+from app.schemas.dependencies import DependencyCreate, DependencyOut
 from app.schemas.projects import BaselineCreate, BaselineOut, ProjectCreate, ProjectOut, ProjectUpdate
 from app.schemas.tasks import TaskCreate, TaskOut, TaskUpdate
 from app.services import plan
@@ -63,6 +65,28 @@ def update_task(project_id: int, task_id: int, body: TaskUpdate, db: Session = D
 def delete_task(project_id: int, task_id: int, db: Session = Depends(get_db),
                 user: User = Depends(get_current_user)) -> Response:
     plan.delete_task(db, plan.get_project(db, project_id), task_id, user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# API-07 ---------------------------------------------------------------------
+@router.get("/{project_id}/dependencies", response_model=list[DependencyOut], tags=["API-07 dependencies"])
+def list_dependencies(project_id: int, db: Session = Depends(get_db),
+                      user: User = Depends(get_current_user)) -> list[DependencyOut]:
+    return plan.list_dependencies(db, plan.get_project(db, project_id), user)
+
+
+@router.post("/{project_id}/dependencies", response_model=DependencyOut, status_code=status.HTTP_201_CREATED,
+             tags=["API-07 dependencies"])
+def create_dependency(project_id: int, body: DependencyCreate, db: Session = Depends(get_db),
+                      user: User = Depends(get_current_user)) -> DependencyOut:
+    return plan.create_dependency(db, plan.get_project(db, project_id), body, user)
+
+
+@router.delete("/{project_id}/dependencies/{dependency_id}", status_code=status.HTTP_204_NO_CONTENT,
+               tags=["API-07 dependencies"])
+def delete_dependency(project_id: int, dependency_id: int, db: Session = Depends(get_db),
+                      user: User = Depends(get_current_user)) -> Response:
+    plan.delete_dependency(db, plan.get_project(db, project_id), dependency_id, user)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

@@ -12,7 +12,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.errors import ApiError
-from app.models import Baseline, BaselineTask, Project, Task, TaskSnapshot, User, project_members
+from app.models import Baseline, BaselineTask, Dependency, Project, Task, TaskSnapshot, User, project_members
+from app.schemas.dependencies import DependencyCreate, DependencyOut, TaskRef
 from app.schemas.projects import (BaselineCreate, BaselineOut, BaselineRef, ProjectCreate, ProjectOut,
                                   ProjectUpdate, UserRef)
 from app.schemas.tasks import TaskCreate, TaskOut, TaskUpdate
@@ -59,6 +60,14 @@ def ensure_write(db: Session, project: Project, user: User) -> None:
     if user.user_id != project.manager_user_id:
         raise audit.deny(db, user.user_id, "projects", project.project_id,
                          "ليست لديك صلاحية لتعديل خطة هذا المشروع")
+
+
+def ensure_dependency_editor(db: Session, project: Project, user: User) -> None:
+    """API-07: the project manager, or a planner (PLANNER) who is a member of the project."""
+    is_planner_member = user.role.role_code == "PLANNER" and is_member(project, user)
+    if user.user_id != project.manager_user_id and not is_planner_member:
+        raise audit.deny(db, user.user_id, "projects", project.project_id,
+                         "ليست لديك صلاحية لتعديل اعتماديات هذا المشروع")
 
 
 # --- projects (API-03) -------------------------------------------------------
@@ -266,6 +275,108 @@ def delete_task(db: Session, project: Project, task_id: int, actor: User) -> Non
         db.rollback()
         raise ApiError(409, "TASK_IN_USE", "لا يمكن حذف المهمة لأنها مستخدمة في سيناريو محفوظ")
     audit.record(db, "delete", actor.user_id, "tasks", task_id, old_value=old)
+    db.commit()
+
+
+# --- dependencies (API-07) ---------------------------------------------------
+
+def _task_ref(t: Task) -> TaskRef:
+    return TaskRef(task_id=t.task_id, task_code=t.task_code, task_name=t.task_name)
+
+
+def dependency_out(d: Dependency) -> DependencyOut:
+    return DependencyOut(dependency_id=d.dependency_id, predecessor=_task_ref(d.predecessor),
+                         successor=_task_ref(d.successor), dependency_type=d.dependency_type,
+                         lag_days=d.lag_days, created_at=d.created_at)
+
+
+def _project_dependencies(db: Session, project: Project) -> list[Dependency]:
+    return list(db.scalars(select(Dependency).join(Task, Task.task_id == Dependency.predecessor_task_id)
+                           .where(Task.project_id == project.project_id)
+                           .order_by(Dependency.dependency_id)))
+
+
+def list_dependencies(db: Session, project: Project, user: User) -> list[DependencyOut]:
+    ensure_read(db, project, user)
+    return [dependency_out(d) for d in _project_dependencies(db, project)]
+
+
+def find_cycle_path(edges: list[tuple[int, int]], predecessor_id: int, successor_id: int) -> list[int] | None:
+    """Returns the cycle [predecessor, successor, ..., predecessor] that the new edge would close,
+    or None. Breadth-first search from the successor along existing edges (shortest path first)."""
+    successors: dict[int, list[int]] = {}
+    for pred, succ in edges:
+        successors.setdefault(pred, []).append(succ)
+    previous: dict[int, int | None] = {successor_id: None}
+    queue = [successor_id]
+    while queue:
+        current = queue.pop(0)
+        if current == predecessor_id:
+            path = []
+            node: int | None = current
+            while node is not None:
+                path.append(node)
+                node = previous[node]
+            return [predecessor_id] + path[::-1]
+        for nxt in successors.get(current, []):
+            if nxt not in previous:
+                previous[nxt] = current
+                queue.append(nxt)
+    return None
+
+
+def create_dependency(db: Session, project: Project, data: DependencyCreate, actor: User) -> DependencyOut:
+    ensure_dependency_editor(db, project, actor)
+    fields = []
+    tasks = {t.task_id: t for t in db.scalars(select(Task).where(
+        Task.project_id == project.project_id,
+        Task.task_id.in_([data.predecessor_task_id, data.successor_task_id])))}
+    if data.predecessor_task_id not in tasks:
+        fields.append({"field": "predecessor_task_id", "message": "المهمة السابقة غير موجودة في هذا المشروع"})
+    if data.successor_task_id not in tasks:
+        fields.append({"field": "successor_task_id", "message": "المهمة اللاحقة غير موجودة في هذا المشروع"})
+    if not fields and data.predecessor_task_id == data.successor_task_id:
+        fields.append({"field": "successor_task_id", "message": "لا يمكن أن تعتمد المهمة على نفسها"})
+    if fields:
+        raise _invalid(fields)
+
+    existing = _project_dependencies(db, project)
+    if any(d.predecessor_task_id == data.predecessor_task_id and d.successor_task_id == data.successor_task_id
+           for d in existing):
+        raise ApiError(409, "DUPLICATE_DEPENDENCY", "هذه العلاقة مسجلة من قبل")
+
+    cycle = find_cycle_path([(d.predecessor_task_id, d.successor_task_id) for d in existing],
+                            data.predecessor_task_id, data.successor_task_id)
+    if cycle is not None:  # TC-08
+        codes = {t.task_id: t.task_code for t in db.scalars(select(Task).where(Task.task_id.in_(cycle)))}
+        pred, succ = tasks[data.predecessor_task_id].task_code, tasks[data.successor_task_id].task_code
+        path = " → ".join(codes[i] for i in cycle)  # codes form one left-to-right run even in Arabic text
+        raise ApiError(409, "DEPENDENCY_CYCLE",
+                       f"لا يمكن إضافة العلاقة لأنها تنشئ دورة بين {pred} و{succ}؛ مسار الدورة: {path}",
+                       [{"field": "cycle_path", "message": path}])
+
+    dependency = Dependency(predecessor_task_id=data.predecessor_task_id, successor_task_id=data.successor_task_id,
+                            dependency_type=data.dependency_type, lag_days=data.lag_days, created_by=actor.user_id)
+    db.add(dependency)
+    db.flush()
+    audit.record(db, "create", actor.user_id, "dependencies", dependency.dependency_id,
+                 new_value={"predecessor": tasks[data.predecessor_task_id].task_code,
+                            "successor": tasks[data.successor_task_id].task_code,
+                            "type": data.dependency_type, "lag_days": data.lag_days})
+    db.commit()
+    db.refresh(dependency)
+    return dependency_out(dependency)
+
+
+def delete_dependency(db: Session, project: Project, dependency_id: int, actor: User) -> None:
+    ensure_dependency_editor(db, project, actor)
+    dependency = db.get(Dependency, dependency_id)
+    if dependency is None or dependency.predecessor.project_id != project.project_id:
+        raise ApiError(404, "NOT_FOUND", "العلاقة غير موجودة في هذا المشروع")
+    old = {"predecessor": dependency.predecessor.task_code, "successor": dependency.successor.task_code,
+           "type": dependency.dependency_type, "lag_days": dependency.lag_days}
+    db.delete(dependency)
+    audit.record(db, "delete", actor.user_id, "dependencies", dependency_id, old_value=old)
     db.commit()
 
 

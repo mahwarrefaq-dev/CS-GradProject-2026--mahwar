@@ -81,6 +81,22 @@ class BaselineTask(Base):
     priority: Mapped[str] = mapped_column(String(10))
 
 
+class Dependency(Base):
+    """TBL-11 dependencies (FR-04, FR-08): finish-to-start only, lag in calendar days."""
+    __tablename__ = "dependencies"
+
+    dependency_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    predecessor_task_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("tasks.task_id"))
+    successor_task_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("tasks.task_id"))
+    dependency_type: Mapped[str] = mapped_column(String(2), default="FS")
+    lag_days: Mapped[int] = mapped_column(SmallInteger, default=0)
+    created_by: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.user_id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    predecessor: Mapped[Task] = relationship(foreign_keys=[predecessor_task_id], lazy="joined")
+    successor: Mapped[Task] = relationship(foreign_keys=[successor_task_id], lazy="joined")
+
+
 class TaskSnapshot(Base):
     """Dated progress snapshot. Append-only (ARC-03, SEC-08): the API never updates or deletes it."""
     __tablename__ = "task_snapshots"
