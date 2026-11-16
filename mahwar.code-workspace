@@ -1,0 +1,144 @@
+{
+  "folders": [
+    {
+      "path": "."
+    }
+  ],
+  "settings": {
+    "files.encoding": "utf8",
+    "files.eol": "\n",
+    "editor.formatOnSave": true,
+    "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+    "python.analysis.extraPaths": [
+      "${workspaceFolder}/backend"
+    ],
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+    "python.testing.cwd": "${workspaceFolder}/backend",
+    "python.testing.pytestArgs": [
+      "tests"
+    ],
+    "[python]": {
+      "editor.defaultFormatter": "ms-python.python"
+    },
+    "[typescript]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[typescriptreact]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "files.exclude": {
+      "**/__pycache__": true,
+      "**/.pytest_cache": true
+    },
+    "sqltools.connections": [
+      {
+        "name": "mahwar (local)",
+        "driver": "PostgreSQL",
+        "server": "localhost",
+        "port": 5432,
+        "database": "mahwar",
+        "username": "mahwar",
+        "askForPassword": true
+      }
+    ]
+  },
+  "extensions": {
+    "recommendations": [
+      "ms-python.python",
+      "ms-python.vscode-pylance",
+      "ms-python.debugpy",
+      "esbenp.prettier-vscode",
+      "mtxr.sqltools",
+      "mtxr.sqltools-driver-pg"
+    ]
+  },
+  "launch": {
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Backend: FastAPI (uvicorn)",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "uvicorn",
+        "args": [
+          "app.main:app",
+          "--reload",
+          "--port",
+          "8000"
+        ],
+        "cwd": "${workspaceFolder}/backend",
+        "envFile": "${workspaceFolder}/backend/.env",
+        "jinja": false
+      },
+      {
+        "name": "Backend: pytest",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "pytest",
+        "cwd": "${workspaceFolder}/backend"
+      }
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Backend: create venv + install",
+        "type": "shell",
+        "command": "python -m venv .venv; .\\.venv\\Scripts\\python -m pip install -r requirements.txt",
+        "options": {
+          "cwd": "${workspaceFolder}/backend"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "Backend: run",
+        "type": "shell",
+        "command": ".\\.venv\\Scripts\\python -m uvicorn app.main:app --reload --port 8000",
+        "options": {
+          "cwd": "${workspaceFolder}/backend"
+        },
+        "isBackground": true,
+        "problemMatcher": []
+      },
+      {
+        "label": "Backend: tests",
+        "type": "shell",
+        "command": ".\\.venv\\Scripts\\python -m pytest",
+        "options": {
+          "cwd": "${workspaceFolder}/backend"
+        },
+        "group": "test",
+        "problemMatcher": []
+      },
+      {
+        "label": "Frontend: install",
+        "type": "shell",
+        "command": "npm install",
+        "options": {
+          "cwd": "${workspaceFolder}/frontend"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "Frontend: run",
+        "type": "shell",
+        "command": "npm run dev",
+        "options": {
+          "cwd": "${workspaceFolder}/frontend"
+        },
+        "isBackground": true,
+        "problemMatcher": []
+      },
+      {
+        "label": "Run all (backend + frontend)",
+        "dependsOn": [
+          "Backend: run",
+          "Frontend: run"
+        ],
+        "problemMatcher": []
+      }
+    ]
+  }
+}

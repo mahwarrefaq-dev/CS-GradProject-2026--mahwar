@@ -1,0 +1,32 @@
+/* Design guide (Chapter 4, Table 4.14): Arabic, right-to-left, dark blue primary colour */
+:root {
+  --primary: #0b3d91;
+  --light: #f2f8fb;
+  --border: #d0d5dd;
+  --high: #b42318;
+  --medium: #b54708;
+  --low: #067647;
+  --na: #475467;
+  font-family: "Segoe UI", Tahoma, "Simplified Arabic", sans-serif;
+  font-size: 16px;
+  color: #1d2939;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; direction: rtl; }
+
+.page { max-width: 960px; margin: 0 auto; padding: 24px; }
+.top { display: flex; align-items: center; gap: 12px; border-bottom: 2px solid var(--light); }
+.top h1 { color: var(--primary); margin: 0; }
+.logo { height: 48px; }
+
+.card { border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-top: 24px; }
+.card h2 { color: var(--primary); margin-top: 0; }
+
+.tb { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tb th, .tb td { border: 1px solid var(--border); padding: 8px; text-align: right; }
+.tb th { background: var(--light); width: 50%; }
+
+.ok { color: var(--low); font-weight: bold; }
+.error { color: var(--high); font-weight: bold; }
+.checking { color: var(--na); }
