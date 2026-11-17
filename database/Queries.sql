@@ -16,10 +16,10 @@ WITH latest AS (
   LEFT JOIN task_snapshots s ON s.task_id = t.task_id AND s.snapshot_date <= :as_of
   WHERE t.project_id = :project_id
   ORDER BY t.task_id, s.snapshot_timestamp DESC NULLS LAST)
-SELECT COUNT(*)                                                      AS total_tasks,
+SELECT COUNT(*) FILTER (WHERE status_at_snapshot IS DISTINCT FROM 'cancelled') AS total_tasks,
        COUNT(*) FILTER (WHERE status_at_snapshot = 'completed')      AS done_tasks,
        ROUND(100.0 * COUNT(*) FILTER (WHERE status_at_snapshot = 'completed')
-             / NULLIF(COUNT(*), 0), 1)                               AS completion_pct,
+             / NULLIF(COUNT(*) FILTER (WHERE status_at_snapshot IS DISTINCT FROM 'cancelled'), 0), 1) AS completion_pct,
        COUNT(*) FILTER (WHERE status_at_snapshot NOT IN ('completed','cancelled')
                           AND snapshot_date > planned_due_date)      AS overdue_tasks,
        MAX(snapshot_timestamp)                                       AS last_update

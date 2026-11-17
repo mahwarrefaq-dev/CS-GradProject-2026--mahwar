@@ -247,7 +247,7 @@ CREATE TABLE audit_log (
     new_value JSONB
 );
 
--- Indexes (see the index table in section 4.4.3)
+-- Indexes (see the index table in section 4.5.3)
 CREATE INDEX ix_task_snapshots_01 ON task_snapshots (task_id, snapshot_timestamp DESC);
 CREATE INDEX ix_tasks_02 ON tasks (project_id);
 CREATE INDEX ix_tasks_03 ON tasks (assignee_user_id);
