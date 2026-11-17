@@ -1,32 +1,49 @@
-import { useEffect, useState } from "react";
-import { clearSession, getSession, setUnauthorizedHandler, type CurrentUser } from "./api";
-import Layout from "./components/Layout";
+import { useCallback, useEffect, useState } from "react";
+import { ApiError, apiGet, clearSession, getSession, setUnauthorizedHandler, type CurrentUser } from "./api";
+import Layout, { type ScreenName } from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
 import PlanPage from "./pages/PlanPage";
 import ProjectsPage from "./pages/ProjectsPage";
+import type { Project } from "./types";
 
 // Simple screen state instead of a routing library (project technology list).
-type Screen = { name: "projects" } | { name: "plan"; projectId: number };
-
-const TITLES: Record<Screen["name"], string> = {
-  projects: "قائمة المشروعات",
-  plan: "خطة المشروع",
-};
+const AVAILABLE: ScreenName[] = ["projects", "plan"];
 
 export default function App() {
   const [user, setUser] = useState<CurrentUser | null>(() => getSession());
-  const [screen, setScreen] = useState<Screen>({ name: "projects" });
+  const [screen, setScreen] = useState<ScreenName>("projects");
+  const [activeProjectId, setActiveProjectId] = useState<number | null>(null);
+  const [projects, setProjects] = useState<Project[] | null>(null);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
 
-  function logout() {
+  const logout = useCallback(() => {
     clearSession();
     setUser(null);
-    setScreen({ name: "projects" });
-  }
+    setScreen("projects");
+    setActiveProjectId(null);
+    setProjects(null);
+  }, []);
 
   useEffect(() => {
     setUnauthorizedHandler(logout); // expired or invalid token -> back to SCR-01
     return () => setUnauthorizedHandler(null);
+  }, [logout]);
+
+  const loadProjects = useCallback(() => {
+    setProjectsError(null);
+    apiGet<Project[]>("/projects")
+      .then(setProjects)
+      .catch((e) => setProjectsError(e instanceof ApiError ? e.message : "تعذر تحميل المشروعات"));
   }, []);
+
+  useEffect(() => {
+    if (user) loadProjects();
+  }, [user, loadProjects]);
+
+  function openProject(projectId: number) {
+    setActiveProjectId(projectId);
+    setScreen("plan");
+  }
 
   if (user === null) {
     return <LoginPage onLogin={setUser} />;
@@ -35,15 +52,37 @@ export default function App() {
   return (
     <Layout
       user={user}
-      title={TITLES[screen.name]}
+      screen={screen}
+      available={AVAILABLE}
+      projects={projects ?? []}
+      activeProjectId={activeProjectId}
+      onSelectProject={openProject}
+      onNavigate={setScreen}
       onLogout={logout}
-      onProjects={() => setScreen({ name: "projects" })}
     >
-      {screen.name === "projects" && (
-        <ProjectsPage user={user} onOpen={(projectId) => setScreen({ name: "plan", projectId })} />
+      {screen === "projects" && (
+        <ProjectsPage
+          user={user}
+          projects={projects}
+          error={projectsError}
+          onReload={loadProjects}
+          onOpen={openProject}
+          onCreated={(p) => {
+            loadProjects();
+            openProject(p.project_id);
+          }}
+        />
       )}
-      {screen.name === "plan" && (
-        <PlanPage projectId={screen.projectId} onBack={() => setScreen({ name: "projects" })} />
+      {screen === "plan" && activeProjectId !== null && (
+        <PlanPage
+          key={activeProjectId}
+          projectId={activeProjectId}
+          onBack={() => setScreen("projects")}
+          onProjectChanged={loadProjects}
+        />
+      )}
+      {screen === "plan" && activeProjectId === null && (
+        <p className="empty">اختر مشروعًا من «المشروع النشط» أعلى الصفحة أو من قائمة المشروعات.</p>
       )}
     </Layout>
   );

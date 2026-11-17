@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Icon from "./Icon";
 
 interface FieldProps {
   id: string;
@@ -17,7 +18,8 @@ export default function Field({ id, label, error, hint, children }: FieldProps) 
       {hint && !error && <small className="hint">{hint}</small>}
       {error && (
         <small className="field-error" id={`${id}-error`} role="alert">
-          ⚠ {error}
+          <Icon name="alert-circle" size={14} />
+          {error}
         </small>
       )}
     </div>

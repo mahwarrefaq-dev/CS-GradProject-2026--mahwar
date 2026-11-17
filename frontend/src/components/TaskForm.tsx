@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { ApiError, apiPatch, apiPost } from "../api";
 import { PRIORITY_AR, type Priority, type Project, type Task } from "../types";
 import Field from "./Field";
+import Icon from "./Icon";
 
 interface TaskFormProps {
   project: Project;
@@ -53,8 +54,7 @@ export default function TaskForm({ project, task, onSaved, onCancel }: TaskFormP
   }
 
   return (
-    <form className="card form-card" onSubmit={submit} noValidate>
-      <h2>{editing ? `تعديل المهمة ${task.task_code}` : "إضافة مهمة"}</h2>
+    <form className="form-card" onSubmit={submit} noValidate>
       {error && error.fields.length === 0 && (
         <p className="alert" role="alert">
           {error.message}
@@ -120,6 +120,7 @@ export default function TaskForm({ project, task, onSaved, onCancel }: TaskFormP
       </div>
       <div className="actions">
         <button type="submit" className="btn btn-primary" disabled={busy}>
+          <Icon name="save" size={16} />
           {busy ? "جارٍ الحفظ…" : "حفظ"}
         </button>
         <button type="button" className="btn" onClick={onCancel} disabled={busy}>

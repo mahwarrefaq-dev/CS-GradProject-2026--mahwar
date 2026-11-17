@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiDelete, apiGet, apiPost } from "../api";
+import Modal from "../components/Modal";
 import ProjectForm from "../components/ProjectForm";
 import TaskForm from "../components/TaskForm";
 import { DATA_MODE_AR, PRIORITY_AR, STATUS_AR, isoDate, type Baseline, type Project, type Task } from "../types";
@@ -7,13 +8,14 @@ import { DATA_MODE_AR, PRIORITY_AR, STATUS_AR, isoDate, type Baseline, type Proj
 interface PlanPageProps {
   projectId: number;
   onBack: () => void;
+  onProjectChanged: () => void; // refresh the project list in the frame (active-project picker)
 }
 
 type Editor = { kind: "none" } | { kind: "project" } | { kind: "task"; task?: Task };
 
 /** SCR-03 – project plan: tasks and baseline (UC-01, FR-02, API-03..API-05).
  *  The dependencies part of SCR-03 (FR-04, API-07) is added in Release 2. */
-export default function PlanPage({ projectId, onBack }: PlanPageProps) {
+export default function PlanPage({ projectId, onBack, onProjectChanged }: PlanPageProps) {
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +66,7 @@ export default function PlanPage({ projectId, onBack }: PlanPageProps) {
       await apiDelete(`/projects/${projectId}/tasks/${task.task_id}`);
       setNotice(`حُذفت المهمة ${task.task_code}`);
       await load();
+      onProjectChanged();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "تعذر حذف المهمة");
     } finally {
@@ -151,28 +154,37 @@ export default function PlanPage({ projectId, onBack }: PlanPageProps) {
       )}
 
       {editor.kind === "project" && (
-        <ProjectForm
-          project={project}
-          onCancel={() => setEditor({ kind: "none" })}
-          onSaved={(p) => {
-            setProject(p);
-            setEditor({ kind: "none" });
-            setNotice("حُفظت بيانات المشروع");
-          }}
-        />
+        <Modal title="تعديل بيانات المشروع" onClose={() => setEditor({ kind: "none" })}>
+          <ProjectForm
+            project={project}
+            onCancel={() => setEditor({ kind: "none" })}
+            onSaved={(p) => {
+              setProject(p);
+              setEditor({ kind: "none" });
+              setNotice("حُفظت بيانات المشروع");
+              onProjectChanged();
+            }}
+          />
+        </Modal>
       )}
 
       {editor.kind === "task" && (
-        <TaskForm
-          project={project}
-          task={editor.task}
-          onCancel={() => setEditor({ kind: "none" })}
-          onSaved={(t) => {
-            setEditor({ kind: "none" });
-            setNotice(`حُفظت المهمة ${t.task_code}`);
-            void load();
-          }}
-        />
+        <Modal
+          title={editor.task ? `تعديل المهمة ${editor.task.task_code}` : "إضافة مهمة"}
+          onClose={() => setEditor({ kind: "none" })}
+        >
+          <TaskForm
+            project={project}
+            task={editor.task}
+            onCancel={() => setEditor({ kind: "none" })}
+            onSaved={(t) => {
+              setEditor({ kind: "none" });
+              setNotice(`حُفظت المهمة ${t.task_code}`);
+              void load();
+              onProjectChanged();
+            }}
+          />
+        </Modal>
       )}
 
       {tasks.length === 0 ? (
