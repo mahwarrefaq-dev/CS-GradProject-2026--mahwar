@@ -19,9 +19,7 @@ class ProjectCreate(BaseModel):
     data_mode: DataMode = "synthetic"
     consent_ref: str | None = Field(default=None, max_length=255)
     consent_date: date | None = None
-    # Design-review change: API-03 also carries the project members by username
-    # (no separate members endpoint exists, and GET /api/users is for the system administrator only).
-    member_usernames: list[str] = Field(default_factory=list)
+    # Members are managed through /api/projects/{id}/members (API-03 after the supervisor's review).
 
 
 class ProjectUpdate(BaseModel):
@@ -34,7 +32,10 @@ class ProjectUpdate(BaseModel):
     data_mode: DataMode | None = None
     consent_ref: str | None = Field(default=None, max_length=255)
     consent_date: date | None = None
-    member_usernames: list[str] | None = None
+
+
+class MemberAdd(BaseModel):
+    username: str = Field(min_length=1, max_length=50)  # pseudonymous username (NFR-01)
 
 
 class UserRef(BaseModel):

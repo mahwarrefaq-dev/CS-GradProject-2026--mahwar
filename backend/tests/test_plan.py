@@ -22,12 +22,14 @@ def pm_headers(team, auth_headers):
 
 
 @pytest.fixture
-def project(client, team, pm_headers) -> dict:
+def project(client, team, pm_headers, add_members) -> dict:
     response = client.post("/api/projects", headers=pm_headers, json={
         "project_code": "PRJ-001", "project_name": "تطوير بوابة خدمات", "planned_start_date": "2026-11-01",
-        "planned_end_date": "2027-01-30", "member_usernames": ["member.a"]})
+        "planned_end_date": "2027-01-30"})
     assert response.status_code == 201, response.text
-    return response.json()
+    project_id = response.json()["project_id"]
+    add_members(pm_headers, project_id, ["member.a"])
+    return client.get(f"/api/projects/{project_id}", headers=pm_headers).json()
 
 
 def _task(code="T-001", start="2026-11-01", due="2026-11-07", **extra) -> dict:
@@ -122,21 +124,85 @@ def test_other_manager_cannot_patch_project(client, project, auth_headers):
     assert response.status_code == 403
 
 
-def test_pm_updates_members_by_username(client, project, pm_headers):
-    response = client.patch(f"/api/projects/{project['project_id']}", headers=pm_headers,
-                            json={"member_usernames": [" Member.Z "]})
+# --- API-03 /members (supervisor's review) ------------------------------------
 
-    assert response.status_code == 200
-    assert {m["username"] for m in response.json()["members"]} == {"pm.demo", "member.z"}
+def test_new_project_has_its_manager_as_only_member(client, team, pm_headers):
+    created = client.post("/api/projects", headers=pm_headers, json={
+        "project_code": "PRJ-002", "project_name": "جديد", "planned_start_date": "2026-11-01",
+        "planned_end_date": "2026-11-30"}).json()
+
+    members = client.get(f"/api/projects/{created['project_id']}/members", headers=pm_headers).json()
+
+    assert [m["username"] for m in members] == ["pm.demo"]
+
+
+def test_pm_adds_member_by_username_and_add_is_audited(client, project, pm_headers, auth_headers, db):
+    url = f"/api/projects/{project['project_id']}/members"
+
+    response = client.post(url, headers=pm_headers, json={"username": " Member.Z "})
+
+    assert response.status_code == 201 and response.json()["username"] == "member.z"
+    listed = client.get(url, headers=auth_headers("member.a")).json()
+    assert {m["username"] for m in listed} == {"pm.demo", "member.a", "member.z"}
+    added = _audit(db, "create", "project_members")
+    assert added[-1].new_value == {"project_code": "PRJ-001", "username": "member.z"}
 
 
 def test_unknown_member_username_returns_422(client, project, pm_headers):
-    response = client.patch(f"/api/projects/{project['project_id']}", headers=pm_headers,
-                            json={"member_usernames": ["member.a", "ghost.user"]})
+    response = client.post(f"/api/projects/{project['project_id']}/members", headers=pm_headers,
+                           json={"username": "ghost.user"})
 
     assert response.status_code == 422
-    field = response.json()["fields"][0]
-    assert field["field"] == "member_usernames" and "ghost.user" in field["message"]
+    assert response.json()["fields"][0]["field"] == "username"
+
+
+def test_duplicate_member_returns_409(client, project, pm_headers):
+    response = client.post(f"/api/projects/{project['project_id']}/members", headers=pm_headers,
+                           json={"username": "member.a"})
+
+    assert response.status_code == 409 and response.json()["code"] == "DUPLICATE_MEMBER"
+
+
+def test_pm_removes_member_and_remove_is_audited(client, project, team, pm_headers, db):
+    url = f"/api/projects/{project['project_id']}/members"
+
+    response = client.delete(f"{url}/{team['member'].user_id}", headers=pm_headers)
+
+    assert response.status_code == 204
+    assert [m["username"] for m in client.get(url, headers=pm_headers).json()] == ["pm.demo"]
+    assert _audit(db, "delete", "project_members")[-1].old_value["username"] == "member.a"
+
+
+def test_manager_cannot_be_removed_and_non_member_returns_404(client, project, team, pm_headers):
+    url = f"/api/projects/{project['project_id']}/members"
+
+    assert client.delete(f"{url}/{team['pm'].user_id}", headers=pm_headers).status_code == 409
+    assert client.delete(f"{url}/{team['outsider'].user_id}", headers=pm_headers).status_code == 404
+
+
+@pytest.mark.parametrize("who", ["member.a", "pm.other"])
+def test_only_project_manager_manages_members(client, project, team, auth_headers, db, who):
+    url = f"/api/projects/{project['project_id']}/members"
+    headers = auth_headers(who)
+
+    added = client.post(url, headers=headers, json={"username": "member.z"})
+    removed = client.delete(f"{url}/{team['member'].user_id}", headers=headers)
+
+    assert added.status_code == 403 and removed.status_code == 403
+    assert len(_audit(db, "access_denied")) == 2
+
+
+def test_outsider_cannot_list_members(client, project, auth_headers):
+    assert client.get(f"/api/projects/{project['project_id']}/members",
+                      headers=auth_headers("member.z")).status_code == 403
+
+
+def test_project_body_no_longer_changes_members(client, project, pm_headers):
+    response = client.patch(f"/api/projects/{project['project_id']}", headers=pm_headers,
+                            json={"member_usernames": ["member.z"]})
+
+    assert response.status_code == 200
+    assert {m["username"] for m in response.json()["members"]} == {"pm.demo", "member.a"}
 
 
 def test_unknown_project_returns_404(client, pm_headers):

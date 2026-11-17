@@ -7,7 +7,7 @@ from app.services.plan import find_cycle_path
 
 
 @pytest.fixture
-def setup(client, make_user, auth_headers):
+def setup(client, make_user, auth_headers, add_members):
     """Project PRJ-001 with tasks T-001..T-004, a member planner and an outside planner."""
     make_user("pm.demo", "PROJECT_MANAGER")
     make_user("member.a", "TEAM_MEMBER")
@@ -16,7 +16,8 @@ def setup(client, make_user, auth_headers):
     pm = auth_headers("pm.demo")
     project = client.post("/api/projects", headers=pm, json={
         "project_code": "PRJ-001", "project_name": "بوابة", "planned_start_date": "2026-11-01",
-        "planned_end_date": "2026-12-31", "member_usernames": ["member.a", "planner.in"]}).json()
+        "planned_end_date": "2026-12-31"}).json()
+    add_members(pm, project["project_id"], ["member.a", "planner.in"])
     url = f"/api/projects/{project['project_id']}"
     ids = {}
     for i in range(1, 5):

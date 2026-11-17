@@ -7,7 +7,8 @@ from app.database import get_db
 from app.deps import PROJECT_MANAGER, get_current_user, require_roles
 from app.models import User
 from app.schemas.dependencies import DependencyCreate, DependencyOut
-from app.schemas.projects import BaselineCreate, BaselineOut, ProjectCreate, ProjectOut, ProjectUpdate
+from app.schemas.projects import (BaselineCreate, BaselineOut, MemberAdd, ProjectCreate, ProjectOut,
+                                  ProjectUpdate, UserRef)
 from app.schemas.tasks import TaskCreate, TaskOut, TaskUpdate
 from app.services import plan
 
@@ -39,6 +40,28 @@ def update_project(project_id: int, body: ProjectUpdate, db: Session = Depends(g
                    user: User = Depends(get_current_user)) -> ProjectOut:
     project = plan.update_project(db, plan.get_project(db, project_id), body, user)
     return plan.project_out(db, project, user)
+
+
+# API-03: project members (supervisor's review) ------------------------------
+@router.get("/{project_id}/members", response_model=list[UserRef], tags=["API-03 projects"])
+def list_members(project_id: int, db: Session = Depends(get_db),
+                 user: User = Depends(get_current_user)) -> list[UserRef]:
+    return plan.list_members(db, plan.get_project(db, project_id), user)
+
+
+@router.post("/{project_id}/members", response_model=UserRef, status_code=status.HTTP_201_CREATED,
+             tags=["API-03 projects"])
+def add_member(project_id: int, body: MemberAdd, db: Session = Depends(get_db),
+               user: User = Depends(get_current_user)) -> UserRef:
+    return plan.add_member(db, plan.get_project(db, project_id), body.username, user)
+
+
+@router.delete("/{project_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT,
+               tags=["API-03 projects"])
+def remove_member(project_id: int, user_id: int, db: Session = Depends(get_db),
+                  user: User = Depends(get_current_user)) -> Response:
+    plan.remove_member(db, plan.get_project(db, project_id), user_id, user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # API-04 ---------------------------------------------------------------------

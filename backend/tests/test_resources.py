@@ -9,7 +9,7 @@ from app.services.resources import latest_availability
 
 
 @pytest.fixture
-def setup(client, make_user, auth_headers):
+def setup(client, make_user, auth_headers, add_members):
     make_user("pm.demo", "PROJECT_MANAGER")
     make_user("pm.other", "PROJECT_MANAGER")
     make_user("member.a", "TEAM_MEMBER")
@@ -18,7 +18,8 @@ def setup(client, make_user, auth_headers):
     pm = auth_headers("pm.demo")
     project = client.post("/api/projects", headers=pm, json={
         "project_code": "PRJ-001", "project_name": "بوابة", "planned_start_date": "2026-11-01",
-        "planned_end_date": "2026-12-31", "member_usernames": ["member.a", "planner.in"]}).json()
+        "planned_end_date": "2026-12-31"}).json()
+    add_members(pm, project["project_id"], ["member.a", "planner.in"])
     task = client.post(f"/api/projects/{project['project_id']}/tasks", headers=pm, json={
         "task_code": "T-001", "task_name": "تطوير", "planned_start_date": "2026-11-01",
         "planned_due_date": "2026-11-10"}).json()

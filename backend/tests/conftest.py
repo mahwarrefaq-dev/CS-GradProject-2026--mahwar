@@ -82,6 +82,17 @@ def make_user(db) -> Callable[..., User]:
 
 
 @pytest.fixture
+def add_members(client) -> Callable[[dict, int, list[str]], None]:
+    """Adds project members through API-03 /members (the project manager's headers are required)."""
+    def _add(headers: dict, project_id: int, usernames: list[str]) -> None:
+        for name in usernames:
+            response = client.post(f"/api/projects/{project_id}/members", headers=headers, json={"username": name})
+            assert response.status_code == 201, response.text
+
+    return _add
+
+
+@pytest.fixture
 def auth_headers(client) -> Callable[[str], dict]:
     def _headers(username: str, password: str = TEST_PASSWORD) -> dict:
         response = client.post("/api/auth/login", json={"username": username, "password": password})

@@ -8,17 +8,17 @@ from app.models import AuditLog, TaskSnapshot
 
 
 @pytest.fixture
-def setup(client, make_user, auth_headers):
+def setup(client, make_user, auth_headers, add_members):
     """PM with one project, two members, one task assigned to member.a, and baseline v1."""
     make_user("pm.demo", "PROJECT_MANAGER")
-    make_user("member.a", "TEAM_MEMBER")
+    member_a_id = make_user("member.a", "TEAM_MEMBER").user_id
     make_user("member.b", "TEAM_MEMBER")
     make_user("member.z", "TEAM_MEMBER")
     pm = auth_headers("pm.demo")
     project = client.post("/api/projects", headers=pm, json={
         "project_code": "PRJ-001", "project_name": "بوابة", "planned_start_date": "2026-11-01",
-        "planned_end_date": "2026-12-31", "member_usernames": ["member.a", "member.b"]}).json()
-    member_a_id = next(m["user_id"] for m in project["members"] if m["username"] == "member.a")
+        "planned_end_date": "2026-12-31"}).json()
+    add_members(pm, project["project_id"], ["member.a", "member.b"])
     task = client.post(f"/api/projects/{project['project_id']}/tasks", headers=pm, json={
         "task_code": "T-001", "task_name": "تحليل", "planned_start_date": "2026-11-01",
         "planned_due_date": "2026-11-10", "assignee_user_id": member_a_id}).json()

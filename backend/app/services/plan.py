@@ -94,18 +94,6 @@ def _check_project_rules(start: date, end: date, data_mode: str, consent_ref: st
         raise _invalid(fields)
 
 
-def _resolve_members(db: Session, member_usernames: list[str], manager: User) -> list[User]:
-    names = {n.strip().lower() for n in member_usernames if n and n.strip()} | {manager.username}
-    users = list(db.scalars(select(User).where(User.username.in_(names))))
-    missing = names - {u.username for u in users}
-    inactive = {u.username for u in users if not u.is_active}
-    if missing or inactive:
-        bad = "، ".join(sorted(missing | inactive))
-        raise _invalid([{"field": "member_usernames",
-                         "message": f"أسماء مستخدمين غير موجودة أو غير نشطة: {bad}"}])
-    return sorted(users, key=lambda u: u.user_id)
-
-
 def project_out(db: Session, project: Project, user: User) -> ProjectOut:
     task_count = db.scalar(select(func.count()).select_from(Task).where(Task.project_id == project.project_id))
     baseline = db.scalar(select(Baseline).where(Baseline.project_id == project.project_id)
@@ -137,9 +125,9 @@ def create_project(db: Session, data: ProjectCreate, actor: User) -> Project:
     if db.scalar(select(Project.project_id).where(Project.project_code == data.project_code)) is not None:
         raise ApiError(409, "DUPLICATE_PROJECT_CODE", "رمز المشروع مستخدم من قبل",
                        [{"field": "project_code", "message": "رمز المشروع مستخدم من قبل"}])
-    project = Project(**data.model_dump(exclude={"member_usernames"}), manager_user_id=actor.user_id)
+    project = Project(**data.model_dump(), manager_user_id=actor.user_id)
     project.manager = actor
-    project.members = _resolve_members(db, data.member_usernames, actor)
+    project.members = [actor]  # the manager is a member; others are added through /members
     db.add(project)
     db.flush()
     audit.record(db, "create", actor.user_id, "projects", project.project_id, new_value=_project_snapshot(project))
@@ -155,8 +143,6 @@ def update_project(db: Session, project: Project, data: ProjectUpdate, actor: Us
               ("planned_start_date", "planned_end_date", "data_mode", "consent_ref", "consent_date")}
     _check_project_rules(merged["planned_start_date"], merged["planned_end_date"], merged["data_mode"],
                          merged["consent_ref"], merged["consent_date"])
-    if "member_usernames" in changes:
-        project.members = _resolve_members(db, changes.pop("member_usernames") or [], project.manager)
     for key, value in changes.items():
         setattr(project, key, value)
     project.updated_at = func.now()
@@ -169,6 +155,44 @@ def update_project(db: Session, project: Project, data: ProjectUpdate, actor: Us
     db.commit()
     db.refresh(project)
     return project
+
+
+# --- project members (API-03: /api/projects/{id}/members) ---------------------
+
+def list_members(db: Session, project: Project, user: User) -> list[UserRef]:
+    ensure_read(db, project, user)
+    return [_user_ref(m) for m in sorted(project.members, key=lambda m: m.user_id)]
+
+
+def add_member(db: Session, project: Project, username: str, actor: User) -> UserRef:
+    ensure_write(db, project, actor)
+    name = username.strip().lower()
+    user = db.scalar(select(User).where(User.username == name))
+    if user is None or not user.is_active:
+        raise _invalid([{"field": "username", "message": "اسم المستخدم غير موجود أو غير نشط"}])
+    if is_member(project, user):
+        raise ApiError(409, "DUPLICATE_MEMBER", "المستخدم عضو في المشروع من قبل",
+                       [{"field": "username", "message": "المستخدم عضو في المشروع من قبل"}])
+    project.members.append(user)
+    db.flush()
+    audit.record(db, "create", actor.user_id, "project_members", f"{project.project_id}:{user.user_id}",
+                 new_value={"project_code": project.project_code, "username": user.username})
+    db.commit()
+    return _user_ref(user)
+
+
+def remove_member(db: Session, project: Project, user_id: int, actor: User) -> None:
+    ensure_write(db, project, actor)
+    if user_id == project.manager_user_id:
+        raise ApiError(409, "MANAGER_IS_MEMBER", "لا يمكن إزالة مدير المشروع من أعضائه")
+    member = next((m for m in project.members if m.user_id == user_id), None)
+    if member is None:
+        raise ApiError(404, "NOT_FOUND", "المستخدم ليس عضوًا في هذا المشروع")
+    project.members.remove(member)
+    db.flush()
+    audit.record(db, "delete", actor.user_id, "project_members", f"{project.project_id}:{user_id}",
+                 old_value={"project_code": project.project_code, "username": member.username})
+    db.commit()
 
 
 # --- tasks (API-04) ----------------------------------------------------------
