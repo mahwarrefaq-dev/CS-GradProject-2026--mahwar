@@ -111,6 +111,24 @@ def test_other_member_cannot_record_snapshot_and_denial_is_audited(client, setup
     assert db.scalar(select(func.count()).select_from(TaskSnapshot)) == 0
 
 
+def test_assignee_cannot_cancel_task_and_denial_is_audited(client, setup, db):
+    response = client.post(_url(setup), headers=setup["a"], json=_snap("2026-11-03", 30, "cancelled"))
+
+    assert response.status_code == 403
+    assert response.json()["message"] == "إلغاء المهمة (الحالة «ملغاة») يسجله مدير المشروع فقط"
+    db.expire_all()
+    denied = list(db.scalars(select(AuditLog).where(AuditLog.action == "access_denied")))
+    assert len(denied) == 1 and denied[0].entity_type == "tasks"
+    assert db.scalar(select(func.count()).select_from(TaskSnapshot)) == 0
+
+
+def test_project_manager_can_cancel_task(client, setup):
+    response = client.post(_url(setup), headers=setup["pm"], json=_snap("2026-11-03", 30, "cancelled"))
+
+    assert response.status_code == 201
+    assert response.json()["status_at_snapshot"] == "cancelled"
+
+
 def test_member_reads_history_but_outsider_gets_403(client, setup):
     client.post(_url(setup), headers=setup["a"], json=_snap("2026-11-03", 20))
 

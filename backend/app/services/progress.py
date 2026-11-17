@@ -2,6 +2,7 @@
 
 - A snapshot is only ever added; there is no update or delete (ARC-03, SEC-08).
 - POST: the task's assignee or the project manager (SEQ-01); others get 403 + access_denied.
+  Status `cancelled` is accepted from the project manager only (403 + access_denied otherwise).
 - GET: any reader of the project (manager or member).
 - Each snapshot points to the project's current (latest) baseline; without one -> 409.
 - "Latest" = most recent snapshot_timestamp, as in Queries.sql Q1 and v_latest_task_snapshot.
@@ -71,6 +72,10 @@ def create_snapshot(db: Session, task_id: int, data: SnapshotCreate, actor: User
     if actor.user_id not in (task.assignee_user_id, project.manager_user_id):
         raise audit.deny(db, actor.user_id, "tasks", task.task_id,
                          "ليست لديك صلاحية لتسجيل تقدم هذه المهمة؛ التسجيل للمسند إليه أو مدير المشروع")
+    if data.status_at_snapshot == "cancelled" and actor.user_id != project.manager_user_id:
+        # Supervisor review 2026-11-17 (API-06, SEQ-01): only the project manager cancels a task.
+        raise audit.deny(db, actor.user_id, "tasks", task.task_id,
+                         "إلغاء المهمة (الحالة «ملغاة») يسجله مدير المشروع فقط")
     _validate(data)
     baseline = db.scalar(select(Baseline).where(Baseline.project_id == project.project_id)
                          .order_by(Baseline.version_no.desc()).limit(1))
